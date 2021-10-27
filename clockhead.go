@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -90,6 +91,28 @@ func setGovernor(core int, g string) {
 
 func setFrequency(core int, f int) {
 	sf := fmt.Sprintf("%d", f)
+	setValueForCore(core, "scaling_setspeed", sf)
+}
+
+/*
+	for some reason setting an unavailable frequency has unpredictable
+	behaviour depending on the target. on my machine (quite old) it
+	works fine except for the 1.7-2GHz band, and the clock often gets
+	stuck at 2GHz at low load.
+*/
+func setClosestFrequency(core int, f int) {
+	freqsl := strings.Split(getValueForCore(0, "scaling_available_frequencies"), " ")
+	freq := f
+	diff := 1e15
+	for _, fs := range freqsl {
+		nf, _ := strconv.Atoi(fs)
+		if ndiff := math.Abs(float64(nf - f)); ndiff < diff {
+			diff = ndiff
+			freq = nf
+		}
+	}
+	sf := fmt.Sprintf("%d", freq)
+
 	setValueForCore(core, "scaling_setspeed", sf)
 }
 
@@ -186,7 +209,7 @@ func main() {
 
 					if perc > 90 {
 						if freq+3*step < maxf {
-							setFrequency(core, freq+3*step)
+							setClosestFrequency(core, freq+3*step)
 							summary[core].chg = "⬆️  ⬆️ "
 						} else {
 							setFrequency(core, maxf)
@@ -194,7 +217,7 @@ func main() {
 						}
 					} else if perc > 50 {
 						if freq+step < maxf {
-							setFrequency(core, freq+step)
+							setClosestFrequency(core, freq+step)
 							summary[core].chg = "⬆️ "
 						} else {
 							setFrequency(core, maxf)
@@ -202,14 +225,14 @@ func main() {
 						}
 					} else if perc < 3 {
 						if freq-2*step > minf {
-							setFrequency(core, freq-2*step)
+							setClosestFrequency(core, freq-2*step)
 							summary[core].chg = "⬇️ ⬇️"
 						} else {
 							setFrequency(core, minf)
 						}
 					} else if perc < 10 {
 						if freq-step > minf {
-							setFrequency(core, freq-step)
+							setClosestFrequency(core, freq-step)
 							summary[core].chg = "⬇️"
 						} else {
 							setFrequency(core, minf)
