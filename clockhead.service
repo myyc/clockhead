@@ -6,6 +6,8 @@ After=network.target network-online.target
 Type=simple
 User=root
 ExecStart=/usr/bin/clockhead
+Restart=on-failure
+RestartSec=30s
 
 [Install]
 WantedBy=multi-user.target
