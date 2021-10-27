@@ -1,5 +1,5 @@
 [Unit]
-Description=clockhead : A CPU frequency scaling daemon for Linux with no configuration
+Description=clockhead
 After=network.target network-online.target
 
 [Service]
