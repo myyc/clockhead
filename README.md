@@ -25,3 +25,18 @@ create `/tmp/clockhead.lock`.
 That's it. This is the pinnacle of my Linux Power Management
 knowledge so if you want more features it's very likely I have
 no idea how to implement them.
+
+Packaging & installation
+========================
+
+The repo has a `PKGBUILD` script, so Arch Linux users are able
+to run `$ makepkg -si`. The others can run `$ go build *.go`,
+install `clockhead` (the binary) on `/usr/bin` and copying
+`clockhead.service` to your favourite `systemd` directory, e.g.
+`/usr/lib/systemd/system/`. Once you've done that you can run
+
+```
+$ systemctl enable clockhead
+$ systemctl start clockhead        # to start it
+$ journalctl -f --unit clockhead   # to monitor it
+```
