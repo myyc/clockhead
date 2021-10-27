@@ -13,13 +13,23 @@ import (
 
 var ROOT = "/sys/devices/system/cpu"
 
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+
+	return true
+}
+
 func getCores() int {
 	c, _ := cpu.Counts(true)
 	return c
 }
 
 func parseInt(s string) int {
-	i, _ := strconv.Atoi(strings.Trim(s, "\n"))
+	i, _ := strconv.Atoi(s)
 	return i
 }
 
@@ -38,7 +48,7 @@ func getValue(fn string) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return string(content[:])
+	return strings.Trim(string(content[:]), "\n")
 }
 
 func getValueForCore(core int, k string) string {
@@ -96,7 +106,16 @@ func getMinFrequency() int {
 }
 
 func isPlugged() bool {
-	return getValue("/sys/class/power_supply/ADP1/online") == "1"
+	acs := [2]string{"ADP1", "ADP1"}
+	for _, ac := range acs {
+		path := fmt.Sprintf("/sys/class/power_supply/%s/online", ac)
+		if pathExists(path) {
+			return getValue(path) == "1"
+		}
+	}
+
+	log.Fatal("Can't find AC path in /sys/class/power_supply, please report this")
+	return true
 }
 
 func isLocked() bool {
