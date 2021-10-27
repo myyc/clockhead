@@ -2,7 +2,7 @@
 
 pkgname=clockhead-git
 _pkgname=clockhead
-pkgver=r3.e2dcd27
+pkgver=r6.5152ba1
 pkgrel=1
 pkgdesc="A CPU frequency scaling daemon for Linux with no configuration."
 arch=("x86_64")

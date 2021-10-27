@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"log"
@@ -12,6 +13,13 @@ import (
 )
 
 var ROOT = "/sys/devices/system/cpu"
+
+const (
+	AC        = 0
+	Battery   = 1
+	Locked    = 2
+	Undefined = 3
+)
 
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
@@ -105,7 +113,7 @@ func getMinFrequency() int {
 	return parseInt(getValueForCore(0, "scaling_min_freq"))
 }
 
-func isPlugged() bool {
+func isOnAC() bool {
 	acs := [2]string{"ADP1", "ADP1"}
 	for _, ac := range acs {
 		path := fmt.Sprintf("/sys/class/power_supply/%s/online", ac)
@@ -130,73 +138,99 @@ type Summary struct {
 }
 
 func main() {
+	var debug bool
+	flag.BoolVar(&debug, "debug", false, "Add debugging log")
+	flag.Usage = func() {
+		fmt.Println("clockhead [--debug]")
+	}
+	flag.Parse()
+
 	minf := getMinFrequency()
 	maxf := getMaxFrequency()
 	step := 250000
 	interval := 3
 
+	state := Undefined
+
 	for {
 		if isLocked() {
-			println("Locked. Waiting ...")
-			time.Sleep(time.Duration(interval) * time.Second)
-		} else if isPlugged() {
-			setAllGovernors("performance")
-			println("Plugged. Waiting ...")
+			if state != Locked {
+				state = Locked
+				println("Locked. Waiting ...")
+			}
 			time.Sleep(time.Duration(interval) * time.Second)
 		} else {
-			setAllGovernors("userspace")
-			percs, _ := cpu.Percent(time.Duration(interval)*time.Second, true)
+			if state == Locked {
+				println("Unlocked")
+			}
+			if isOnAC() {
+				if state != AC {
+					state = AC
+					println("On AC 🔌⚡. Setting `performance` governor.")
+					setAllGovernors("performance")
+				}
+				time.Sleep(time.Duration(interval) * time.Second)
+			} else {
+				if state != Battery {
+					state = Battery
+					println("On Battery 🔋⚡. Setting `userspace` governor and optimising frequency.")
+					setAllGovernors("userspace")
+				}
+				percs, _ := cpu.Percent(time.Duration(interval)*time.Second, true)
 
-			summary := make([]Summary, getCores())
+				summary := make([]Summary, getCores())
 
-			for core, perc := range percs {
-				freq := getFrequency(core)
-				summary[core].chg = ""
+				for core, perc := range percs {
+					freq := getFrequency(core)
+					summary[core].chg = ""
 
-				if perc > 90 {
-					if freq+3*step < maxf {
-						setFrequency(core, freq+3*step)
-						summary[core].chg = "⬆️  ⬆️ "
-					} else {
-						setFrequency(core, maxf)
-						summary[core].chg = "🔥"
+					if perc > 90 {
+						if freq+3*step < maxf {
+							setFrequency(core, freq+3*step)
+							summary[core].chg = "⬆️  ⬆️ "
+						} else {
+							setFrequency(core, maxf)
+							summary[core].chg = "🔥"
+						}
+					} else if perc > 50 {
+						if freq+step < maxf {
+							setFrequency(core, freq+step)
+							summary[core].chg = "⬆️ "
+						} else {
+							setFrequency(core, maxf)
+							summary[core].chg = "🔥"
+						}
+					} else if perc < 3 {
+						if freq-2*step > minf {
+							setFrequency(core, freq-2*step)
+							summary[core].chg = "⬇️ ⬇️"
+						} else {
+							setFrequency(core, minf)
+						}
+					} else if perc < 10 {
+						if freq-step > minf {
+							setFrequency(core, freq-step)
+							summary[core].chg = "⬇️"
+						} else {
+							setFrequency(core, minf)
+						}
 					}
-				} else if perc > 50 {
-					if freq+step < maxf {
-						setFrequency(core, freq+step)
-						summary[core].chg = "⬆️ "
-					} else {
-						setFrequency(core, maxf)
-						summary[core].chg = "🔥"
-					}
-				} else if perc < 3 {
-					if freq-2*step > minf {
-						setFrequency(core, freq-2*step)
-						summary[core].chg = "⬇️ ⬇️"
-					} else {
-						setFrequency(core, minf)
-					}
-				} else if perc < 10 {
-					if freq-step > minf {
-						setFrequency(core, freq-step)
-						summary[core].chg = "⬇️"
-					} else {
-						setFrequency(core, minf)
-					}
+
+					summary[core].perc = perc
+					summary[core].freq = getFrequency(core)
 				}
 
-				summary[core].perc = perc
-				summary[core].freq = getFrequency(core)
-			}
-
-			for core, s := range summary {
-				str := fmt.Sprintf("%d:\t%.2f%%, %.2fGHz", core, s.perc, float64(s.freq)/1e6)
-				if s.chg != "" {
-					str = fmt.Sprintf("%s %s", str, s.chg)
+				if debug {
+					for core, s := range summary {
+						str := fmt.Sprintf("%d:\t%.2f%%, %.2fGHz", core, s.perc, float64(s.freq)/1e6)
+						if s.chg != "" {
+							str = fmt.Sprintf("%s %s", str, s.chg)
+						}
+						println(str)
+					}
+					println("")
 				}
-				fmt.Println(str)
 			}
-			fmt.Println("")
 		}
 	}
 }
