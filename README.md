@@ -5,9 +5,9 @@ A CPU frequency scaling daemon for Linux with no configuration.
 
 `# sudo go run *.go`
 
-It outputs whatever it's doing so you can watch the magic on
-your terminal for a few seconds until you get bored. It even
-has emojis!!!
+If you append `--debug` it outputs whatever it's doing so you
+can watch the magic on your terminal for a few seconds until
+you get bored. It even has emojis!!!
 
 The algorithm
 =============
